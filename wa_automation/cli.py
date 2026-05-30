@@ -48,10 +48,9 @@ async def run(args: argparse.Namespace) -> None:
             await client.login_with_phone(args.phone)
             print("Logged in.")
         elif args.command == "chats":
-            open_chat = await client.open_chat_by_id("212179974418532@lid")
-            # chats = await client.collect_chats()
-            time.sleep(100)
-            # print(json.dumps([asdict(chat) for chat in chats], ensure_ascii=False, indent=2))
+            # open_chat = await client.open_chat_by_id("212179974418532@lid")
+            chats = await client.collect_chats()
+            print(chats)
         elif args.command == "messages":
             cursor = "3EB09C4437871769706A47"
             chat_id = "142940974391481@lid"

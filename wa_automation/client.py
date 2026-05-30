@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 import random
-import time
 import typing
 from pathlib import Path
-from typing import Any, Coroutine, Literal
 
 from playwright.async_api import BrowserContext, Page, TimeoutError, async_playwright
 
-from wa_automation.asd import Attachment, Message
+from wa_automation import utils_chat
+from wa_automation.asd import Attachment, Message, Chat
 
 WHATSAPP_URL = "https://web.whatsapp.com/"
 
@@ -36,8 +34,8 @@ class WhatsAppClient:
         self.user_data_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = await async_playwright().start()
         self.context = await self._playwright.chromium.launch_persistent_context(
-            # user_data_dir=str(self.user_data_dir),
-            user_data_dir=r"C:\Users\Nikita\AppData\Local\Google\Chrome\User Data",
+            user_data_dir=str(self.user_data_dir),
+            # user_data_dir=r"C:\Users\Nikita\AppData\Local\Google\Chrome\User Data",
             headless=self.headless,
             slow_mo=self.slow_mo_ms,
             viewport={"width": 1440, "height": 950},
@@ -61,11 +59,21 @@ class WhatsAppClient:
         await page.goto(WHATSAPP_URL, wait_until="domcontentloaded")
 
         login_by_phone_number = self._page.locator(
-            "[data-testid='link-device-qrcode-alt-linking-hint']"
+            "[data-testid='wa-brand-arrow-right']"
         )
-        #TODO: не может кликнуть
-        await login_by_phone_number.click()
+        await login_by_phone_number.wait_for(state="visible")
+        #TODO: не может кликнуть с помощью click()
+        box = await login_by_phone_number.bounding_box()
 
+        x = box["x"] + box["width"] / 2
+        y = box["y"] + box["height"] / 2
+
+        await page.mouse.move(x, y, steps=20)
+        await page.wait_for_timeout(300)
+
+        await page.mouse.down()
+        await page.wait_for_timeout(150)
+        await page.mouse.up()
         phone_screen = self._page.locator(
             "[data-testid='link-device-phone-number-entry-screen']"
         )
@@ -104,67 +112,58 @@ class WhatsAppClient:
         #Проверка что успешно войдено
         await self.wait_for_whatsapp_modules()
 
-
     async def _get_chats_from_internal_store(self) -> list[dict]:
+        #TODO: переделать без serialize
         return await self._page.evaluate(
             """
             async () => {
                 const { Chat } = window.require('WAWebCollections');
 
-                const chats = Chat.getModelsArray();
-
-                return chats.map((chat) => {
-                    const data = typeof chat.serialize === 'function'
+                return Chat.getModelsArray().map(chat => {
+                    return typeof chat.serialize === 'function'
                         ? chat.serialize()
                         : chat;
-
-                    const id =
-                        data?.id?._serialized ||
-                        chat?.id?._serialized ||
-                        String(chat?.id || '');
-
-                    const title =
-                        data?.formattedTitle ||
-                        data?.name ||
-                        chat?.formattedTitle ||
-                        chat?.name ||
-                        '';
-
-                    const lastMessage =
-                        data?.lastMessage ||
-                        chat?.lastMessage ||
-                        chat?.msgs?.getModelsArray?.()?.at?.(-1) ||
-                        null;
-
-                    const previewMessage =
-                        lastMessage?.body ||
-                        lastMessage?.caption ||
-                        lastMessage?.text ||
-                        '';
-
-                    const timestamp =
-                        data?.t ||
-                        chat?.t ||
-                        lastMessage?.t ||
-                        null;
-
-                    return {
-                        id,
-                        title,
-                        preview_message: previewMessage || null,
-                        preview_last_time_message: timestamp,
-                    };
                 });
             }
             """
         )
 
-    async def collect_chats(self) -> None:
+    async def collect_chats(self) -> list[Chat]:
+        await self._page.wait_for_timeout(20_000)
         await self.wait_for_whatsapp_modules()
-        chats = await self._get_chats_from_internal_store()
+        raw_chats = await self._get_chats_from_internal_store()
 
-        for chat in chats:
-            print(chat)
+        result: list[Chat] = []
+        for raw_chat in raw_chats:
+
+            chat_id = (
+                    raw_chat.get("id", {}).get("_serialized")
+            )
+
+            last_message = utils_chat._extract_last_message(raw_chat)
+            #TODO: не получаю title из-за serialize объекта чата в _get_chats_from_internal_store
+            title = (
+                    raw_chat.get("formattedTitle")
+                    or raw_chat.get("name")
+                    or ""
+            )
+
+            result.append(
+                Chat(
+                    id=chat_id,
+                    title=title,
+                    preview_message=utils_chat._extract_preview_message(
+                        last_message
+                    ),
+                    preview_last_time_message=utils_chat._extract_timestamp(
+                        raw_chat,
+                        last_message,
+                    ),
+                    type=utils_chat._detect_chat_type(chat_id, raw_chat),
+                    unread_count=raw_chat.get("unreadCount", 0),
+                )
+            )
+        return result
 
     async def wait_for_whatsapp_modules(self) -> None:
         try:

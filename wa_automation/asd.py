@@ -1,6 +1,8 @@
 import datetime
 import typing
 from dataclasses import dataclass
+from enum import StrEnum
+
 
 @dataclass
 class Attachment:
@@ -20,3 +22,18 @@ class Message:
     status: typing.Literal["PENDING", "SENT", "DELIVERED", "ERROR", "READ"]
     updated_at: datetime.datetime | None = None
     attachments: list[Attachment] | None = None
+
+
+class ChatType(StrEnum):
+    DIRECT = "DIRECT"
+    BROADCAST = "BROADCAST"
+    GROUP = "GROUP"
+
+@dataclass
+class Chat:
+    id: str
+    title: str
+    preview_message: str
+    preview_last_time_message: datetime.datetime
+    type: ChatType
+    unread_count: int
