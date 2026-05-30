@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import datetime
 import json
 import time
 from dataclasses import asdict
+
+from pyexpat.errors import messages
 
 from .client import WhatsAppClient
 
@@ -32,7 +35,8 @@ def build_parser() -> argparse.ArgumentParser:
     send.add_argument("message", help="Message text.")
 
     return parser
-
+#"142940974391481@lid" - Lera
+        #"190417509294162@lid" - Me
 
 async def run(args: argparse.Namespace) -> None:
     async with WhatsAppClient(
@@ -49,11 +53,18 @@ async def run(args: argparse.Namespace) -> None:
             time.sleep(100)
             # print(json.dumps([asdict(chat) for chat in chats], ensure_ascii=False, indent=2))
         elif args.command == "messages":
-            messages = await client.collect_messages(args.chat, limit=args.limit)
-            print(json.dumps([asdict(message) for message in messages], ensure_ascii=False, indent=2))
+            cursor = "3EB09C4437871769706A47"
+            chat_id = "142940974391481@lid"
+            limit = 50
+            # after_date = datetime.datetime(2026, 5, 29, 10, 49, 57, tzinfo=datetime.timezone.utc)
+            after_date = datetime.datetime(2026, 5, 29, tzinfo=datetime.timezone.utc)
+            before_date = datetime.datetime(2026, 5, 29, tzinfo=datetime.timezone.utc)
+            messages = await client.get_messages(chat_id=chat_id, limit=limit, after_date=after_date, before_date=None, cursor=cursor)
+            print(messages)
         elif args.command == "send":
-            await client.send_message()
-            print("Message sent.")
+            await client.send_message_tg()
+            # message = await client.send_message()
+            # print("Message sent.", message)
         else:
             raise ValueError(f"Unsupported command: {args.command}")
 

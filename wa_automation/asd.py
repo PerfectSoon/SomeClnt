@@ -17,14 +17,6 @@ class Message:
     created_at: datetime.datetime
     sender_id: str
     direction: typing.Literal["INBOUND", "OUTBOUND"]
+    status: typing.Literal["PENDING", "SENT", "DELIVERED", "ERROR", "READ"]
     updated_at: datetime.datetime | None = None
     attachments: list[Attachment] | None = None
-
-
-async def get_messages(
-        chat_id: str,
-        cursor: str | None = None,
-        after_date: datetime.datetime | None = None,
-        before_date: datetime.datetime | None = None,
-        limit: int = 50
-): ...
