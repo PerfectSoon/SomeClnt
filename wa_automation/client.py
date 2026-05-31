@@ -11,7 +11,11 @@ from wa_automation import utils_chat
 from wa_automation.asd import Attachment, Message, Chat
 
 WHATSAPP_URL = "https://web.whatsapp.com/"
-
+REAL_CHROME_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/137.0.7151.118 Safari/537.36"
+)
 
 class WhatsAppClient:
 
@@ -39,8 +43,9 @@ class WhatsAppClient:
             headless=self.headless,
             slow_mo=self.slow_mo_ms,
             viewport={"width": 1440, "height": 950},
-            locale="ru-RU",
+            locale="en-US",
             args=["--profile-directory=Default","--disable-blink-features=AutomationControlled"],
+            user_agent=REAL_CHROME_UA,
         )
         self.page = self.context.pages[0] if self.context.pages else await self.context.new_page()
         self.page.set_default_timeout(self.timeout_ms)
@@ -113,40 +118,52 @@ class WhatsAppClient:
         await self.wait_for_whatsapp_modules()
 
     async def _get_chats_from_internal_store(self) -> list[dict]:
-        #TODO: переделать без serialize
         return await self._page.evaluate(
             """
-            async () => {
+            () => {
                 const { Chat } = window.require('WAWebCollections');
 
                 return Chat.getModelsArray().map(chat => {
-                    return typeof chat.serialize === 'function'
-                        ? chat.serialize()
-                        : chat;
+                    const raw =
+                        typeof chat.serialize === 'function'
+                            ? chat.serialize()
+                            : {};
+
+                    return {
+                        ...raw,
+                        
+                        id:
+                        chat.id?._serialized ??
+                        raw.id?._serialized ??
+                        null,
+                        
+
+                        title:
+                            chat.formattedTitle ??
+                            chat.name ??
+                            chat.contact?.formattedName ??
+                            raw.formattedTitle ??
+                            raw.name ??
+                            null,
+                    };
                 });
             }
             """
         )
 
     async def collect_chats(self) -> list[Chat]:
-        await self._page.wait_for_timeout(20_000)
+        await self._page.wait_for_timeout(1_000)
         await self.wait_for_whatsapp_modules()
         raw_chats = await self._get_chats_from_internal_store()
 
         result: list[Chat] = []
         for raw_chat in raw_chats:
 
-            chat_id = (
-                    raw_chat.get("id", {}).get("_serialized")
-            )
+            chat_id = raw_chat.get("id")
+
 
             last_message = utils_chat._extract_last_message(raw_chat)
-            #TODO: не получаю title из-за serialize объекта чата в _get_chats_from_internal_store
-            title = (
-                    raw_chat.get("formattedTitle")
-                    or raw_chat.get("name")
-                    or ""
-            )
+            title = raw_chat.get("title") or ""
 
             result.append(
                 Chat(
@@ -215,14 +232,17 @@ class WhatsAppClient:
 
                 if (Cmd.openChatBottom) {
                     await Cmd.openChatBottom({ chat });
-                    return true;
-                }
-
-                if (Cmd.openChatAt) {
+                } else if (Cmd.openChatAt) {
                     await Cmd.openChatAt({ chat });
-                    return true;
+                } else {
+                    return false;
                 }
 
+                
+                if (chat.active === true) {
+                    return true;
+                }
+                
                 return false;
             }
             """,
@@ -231,8 +251,6 @@ class WhatsAppClient:
 
         if not opened:
             raise RuntimeError(f"Не удалось открыть чат: {chat_id}")
-
-        #TODO: Добавить проверку что чат открылся, по селекктору
 
     async def _typing_text(
             self,
@@ -284,7 +302,7 @@ class WhatsAppClient:
         chat_id = "142940974391481@lid"
         #"142940974391481@lid" - Lera
         #"190417509294162@lid" - Me
-        message = "МЯУ"
+        message = "Здарова лошкунья"
 
         await self.open_chat_by_id(chat_id)
 

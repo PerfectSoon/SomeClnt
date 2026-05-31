@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
 async def run(args: argparse.Namespace) -> None:
     async with WhatsAppClient(
         user_data_dir=args.profile,
-        headless=args.headless,
+        headless=False,
         timeout_ms=args.timeout,
     ) as client:
         if args.command == "login":
@@ -61,9 +61,9 @@ async def run(args: argparse.Namespace) -> None:
             messages = await client.get_messages(chat_id=chat_id, limit=limit, after_date=after_date, before_date=None, cursor=cursor)
             print(messages)
         elif args.command == "send":
-            await client.send_message_tg()
-            # message = await client.send_message()
-            # print("Message sent.", message)
+            # await client.send_message_tg()
+            message = await client.send_message()
+            print("Message sent.", message)
         else:
             raise ValueError(f"Unsupported command: {args.command}")
 
